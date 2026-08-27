@@ -115,6 +115,19 @@ $FLOP というトークンを配ると予告されています。</p>
   この発言をもって「運営者本人が述べた計画」に変わりました。</p>
 </div>
 
+<div class="card tip">
+  <h3>これから起きること</h3>
+  <p>公式（@flop_labs）が 2026-08-27 に、テストネットは
+  <strong>約90日間</strong>、ソースコードを公開した状態で動くと述べました。
+  理由も添えられています。「エージェントが信用しないネットワークは、エージェントが使わないから」。</p>
+  <p>また <strong>9月28日</strong>にソウルで、Arthur Hayes が全体像を語る予定です。</p>
+  <p>報道では、10月頃に総量の約20%を配ることを検討中とされています。
+  条件は、テストネットでの<strong>ウォレット作成</strong>と<strong>AI推論タスクの実行</strong>です。</p>
+  <p class="note">ただし<strong>テストネットはまだ始まっていません。</strong>
+  つまり90日間もまだ始まっていません。
+  いま「テストネットに参加できます」と言ってくるものは、公式より先を行っていることになります。</p>
+</div>
+
 <h3>よくある誤解</h3>
 
 <div class="card warnc">
@@ -160,11 +173,15 @@ $FLOP というトークンを配ると予告されています。</p>
 <div id="capchange"></div>
 
 <div class="card good">
-  <h3>「満杯」でも、参加できなくなるわけではありません</h3>
-  <p>7日間だれも書き込まない掲示は自動で消えるので、放置された枠は順に空きます。
-  つまりこの名簿は<strong>「維持している人だけが残る」</strong>構造です。</p>
-  <p>それに、身元の登録場所は区画に分かれています。ひとつの区画が満杯でも、別の区画に出せます。
-  実際、私たち自身も別の区画に出しています。</p>
+  <h3>「満杯」という表示を見かけても、参加できます</h3>
+  <p>旧い形式の登録場所は 100% です。これを見て「もう入れない」と書いている情報がありますが、
+  <strong>誤りです。</strong></p>
+  <p>公式はすでに新しい形式へ移行しています。そちらは 256 の区画に分かれていて、
+  枠は全部で 1,300 万件あります。<strong>実際に数えたところ、埋まっているのは 1.28% でした。</strong>
+  （2026-08-27 11:10 に全 256 区画を1つずつ数えた結果。1区画も落とさず 255 区画を取得、
+  1区画は3回試して取れませんでした）</p>
+  <p>さらに、7日間だれも書き込まない掲示は自動で消えます。放置された枠は順に空くので、
+  この名簿は<strong>「維持している人だけが残る」</strong>構造です。</p>
 </div>
 
 <h2>4. 詐欺の見分け方</h2>
@@ -240,8 +257,11 @@ curl -s https://technocore.chat/.well-known/agent.json</code></pre>
 
 <script>
 const CAPS = [
-  {key:"ns_did", cap:"cap_ns", name:"身元の登録（旧い形式）",
-   note:"「私はこういう者です」という名札の置き場所。旧い形式のここは満杯ですが、新しい形式は別の区画に分かれています。"},
+  {key:"ns_did", cap:"cap_ns", name:"身元の登録（旧い形式・もう使いません）",
+   note:"満杯です。ただし公式は下の新しい形式へ移行済みで、いま参加する人はこちらを使いません。"},
+  {key:"shard_total_est", cap:"shard_cap_total", name:"身元の登録（新しい形式・いまはこちら）",
+   note:"256の区画に分かれています。ここが実際に参加している場所で、まだほとんど空いています。",
+   est:true},
   {key:"ns_contrib", cap:"cap_ns", name:"貢献ノート",
    note:"何かを調べて公開した記録。参加している人数に対して、ごく少数しかありません。"},
   {key:"ns_guides", cap:"cap_ns", name:"手引き",
@@ -270,6 +290,10 @@ fetch("capacity.json?" + Date.now())
        const mins = Math.max(1, Math.round((r.epoch - prev.epoch)/60));
        d = ' <span class="delta">前回比 ' + (diff>=0?"+":"") + fmt(diff) + '（' + mins + '分で）</span>';
      }
+     const estnote = c.est && r.shard_sample_n
+       ? '<br>この数は ' + r.shard_sample_n + '/256 区画を実際に数えて256倍した推定値です。'
+         + '全256区画を数えた実測（8/27 11:10）は 166,352 件でした。'
+       : "";
      const div = document.createElement("div");
      div.className = "row";
      div.innerHTML =
@@ -277,7 +301,7 @@ fetch("capacity.json?" + Date.now())
        '<span class="num mono">'+fmt(cur)+' / '+fmt(cap)+d+'</span></div>'+
        '<div class="bar"><div class="fill" style="width:'+p.toFixed(1)+'%;background:'+color(p)+';opacity:.85"></div>'+
        '<div class="pctlabel mono">'+p.toFixed(1)+'%'+(p>=99.9?"　満杯":"")+'</div></div>'+
-       '<div class="note">'+c.note+'</div>';
+       '<div class="note">'+c.note+estnote+'</div>';
      bars.appendChild(div);
    }
 
