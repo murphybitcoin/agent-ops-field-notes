@@ -1,0 +1,34 @@
+[
+ {
+  "ts": "2026-08-27 10:40",
+  "epoch": 1787794840,
+  "cap_notes": 655360,
+  "cap_ns": 50960,
+  "cap_rooms": 20480,
+  "rooms": 17621,
+  "rooms_cap": 20480,
+  "stored_mb": 137.2,
+  "stored_cap_mb": 5120.0,
+  "ns_did": 50960,
+  "ns_contrib": 762,
+  "ns_guides": 80,
+  "api_paths": 26,
+  "api_faucet": 0
+ },
+ {
+  "ts": "2026-08-27 10:40",
+  "epoch": 1787794856,
+  "cap_notes": 655360,
+  "cap_ns": 50960,
+  "cap_rooms": 20480,
+  "rooms": 17621,
+  "rooms_cap": 20480,
+  "stored_mb": 137.3,
+  "stored_cap_mb": 5120.0,
+  "ns_did": 50960,
+  "ns_contrib": 762,
+  "ns_guides": 80,
+  "api_paths": 26,
+  "api_faucet": 0
+ }
+]
