@@ -1,0 +1,123 @@
+name: measure technocore capacity
+
+# なぜ GitHub 側で測るか（D・2026-08-27）
+#   これまでは Mac の launchd が1時間ごとに測っていたが、Mac が閉じていると止まる。
+#   公開ページの数字が止まると、見た人が古い数字を最新だと思って掴む。
+#   ★予測は出さない。上限そのものが運営の判断で動くため
+#     （0827 に全体の上限が 327,680 → 655,360 へ引き上げられた実例がある）。
+
+on:
+  schedule:
+    - cron: "7 * * * *"      # 毎時07分
+  workflow_dispatch:          # 手で回すこともできる
+
+permissions:
+  contents: write
+
+concurrency:
+  group: measure-capacity
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 測って docs/capacity.json に追記
+        run: |
+          python3 - <<'PY'
+          import json, os, re, time, datetime, urllib.request
+
+          BASE = "https://technocore.chat"
+          OUT  = "docs/capacity.json"
+          NS   = ("did", "contrib", "guides")
+          SHARD_SAMPLE = 16   # 全256区画は時間がかかる。標本から推定し、推定と明記する
+
+          def get(path, timeout=30):
+              try:
+                  with urllib.request.urlopen(f"{BASE}/{path}", timeout=timeout) as r:
+                      return r.read().decode("utf-8", "replace")
+              except Exception:
+                  return None
+
+          now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+          rec = {"ts": now.strftime("%Y-%m-%d %H:%M"), "epoch": int(time.time())}
+
+          # 上限は毎回取り直す。固定値として持たない
+          try:
+              lim = json.loads(get(".well-known/agent.json"))["limits"]
+              rec["cap_notes"] = lim.get("notes")
+              rec["cap_ns"]    = lim.get("notes_per_namespace")
+              rec["cap_rooms"] = lim.get("rooms")
+          except Exception:
+              rec["cap_notes"] = rec["cap_ns"] = rec["cap_rooms"] = None
+
+          rooms = get("rooms")
+          if rooms:
+              m = re.search(r"of ([\d,]+) rooms \(cap ([\d,]+), ([\d.]+)([MG]) of ([\d.]+)G stored", rooms)
+              if m:
+                  rec["rooms"] = int(m.group(1).replace(",", ""))
+                  rec["rooms_cap"] = int(m.group(2).replace(",", ""))
+                  v = float(m.group(3))
+                  rec["stored_mb"] = round(v * 1024 if m.group(4) == "G" else v, 1)
+                  rec["stored_cap_mb"] = round(float(m.group(5)) * 1024, 1)
+
+          for ns in NS:
+              b = get(f"kv/{ns}")
+              rec[f"ns_{ns}"] = b.count(f"/kv/{ns}/") if b else None
+
+          # 新しい形式（シャード）。★直列で取る。並列にすると取りこぼす
+          #   〔D実測 0827: 16区画を並列で取ったら7区画が失敗。直列なら16/16成功〕
+          sample = []
+          for h in range(SHARD_SAMPLE):
+              b = get(f"kv/did-{h:02x}", timeout=25)
+              if b is not None:
+                  sample.append(b.count(f"/kv/did-{h:02x}/"))
+              time.sleep(0.2)
+          if sample:
+              rec["shard_sample_n"]    = len(sample)
+              rec["shard_sample_mean"] = round(sum(sample) / len(sample), 1)
+              rec["shard_total_est"]   = int(round(sum(sample) / len(sample) * 256))
+              rec["shard_cap_total"]   = (rec.get("cap_ns") or 0) * 256
+              rec["shard_max"]         = max(sample)
+
+          # 受け取り窓口。ここが0でなくなったら最重要
+          try:
+              paths = sorted(json.loads(get("openapi.json")).get("paths", {}))
+              rec["api_paths"]  = len(paths)
+              rec["api_faucet"] = len([p for p in paths
+                                       if re.search(r"faucet|testnet|airdrop|mint|claim", p, re.I)])
+          except Exception:
+              rec["api_paths"] = rec["api_faucet"] = None
+
+          # ★取得に失敗した回は保存しない。誤報を残さないため
+          #   （0827 に測定側のバグで api_paths=None の回が保存され、
+          #     「窓口が出現した」という誤報が1回出た）
+          if rec.get("api_paths") is None or rec.get("ns_did") is None:
+              print("取得に失敗したので保存しません:", rec)
+              raise SystemExit(0)
+
+          rows = []
+          if os.path.exists(OUT):
+              try:
+                  rows = json.load(open(OUT, encoding="utf-8"))
+              except Exception:
+                  rows = []
+          rows.append(rec)
+          rows = rows[-720:]     # 30日分だけ残す
+          json.dump(rows, open(OUT, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+          print(f"追記しました（記録 {len(rows)}件）: {rec['ts']}")
+          PY
+
+      - name: 変化があれば commit
+        run: |
+          if git diff --quiet docs/capacity.json; then
+            echo "変化なし。commit しません。"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/capacity.json
+          git commit -m "measure: technocore capacity $(date -u '+%Y-%m-%dT%H:%MZ')"
+          git push
