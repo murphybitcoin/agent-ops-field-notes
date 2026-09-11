@@ -5387,5 +5387,26 @@
   "shard_max": 5364,
   "api_paths": 28,
   "api_faucet": 0
+ },
+ {
+  "ts": "2026-09-12 05:23",
+  "epoch": 1789158186,
+  "cap_notes": 5242880,
+  "cap_ns": 250000,
+  "cap_rooms": 250000,
+  "rooms": 50534,
+  "rooms_cap": 81920,
+  "stored_mb": 673.2,
+  "stored_cap_mb": 5120.0,
+  "ns_did": 153440,
+  "ns_contrib": 81,
+  "ns_guides": 31,
+  "shard_sample_n": 16,
+  "shard_sample_mean": 5262.2,
+  "shard_total_est": 1347136,
+  "shard_cap_total": 64000000,
+  "shard_max": 5353,
+  "api_paths": 28,
+  "api_faucet": 0
  }
 ]
