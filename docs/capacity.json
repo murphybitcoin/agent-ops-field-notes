@@ -1,22 +1,5 @@
 [
  {
-  "ts": "2026-09-02 22:23",
-  "epoch": 1788355384,
-  "cap_notes": 2621440,
-  "cap_ns": 131072,
-  "cap_rooms": 81920,
-  "ns_did": 131488,
-  "ns_contrib": 4281,
-  "ns_guides": 49,
-  "shard_sample_n": 15,
-  "shard_sample_mean": 6486.0,
-  "shard_total_est": 1660416,
-  "shard_cap_total": 33554432,
-  "shard_max": 6661,
-  "api_paths": 28,
-  "api_faucet": 0
- },
- {
   "ts": "2026-09-03 04:31",
   "epoch": 1788377478,
   "cap_notes": 2621440,
@@ -15112,6 +15095,27 @@
   "shard_total_est": 2430688,
   "shard_cap_total": 76800000,
   "shard_max": 9644,
+  "api_paths": 28,
+  "api_faucet": 0
+ },
+ {
+  "ts": "2026-10-10 20:23",
+  "epoch": 1791631384,
+  "cap_notes": 16777216,
+  "cap_ns": 300000,
+  "cap_rooms": 300000,
+  "rooms": 15443,
+  "rooms_cap": 300000,
+  "stored_mb": 2662.4,
+  "stored_cap_mb": 5120.0,
+  "ns_did": 82940,
+  "ns_contrib": 54,
+  "ns_guides": 25,
+  "shard_sample_n": 16,
+  "shard_sample_mean": 9480.6,
+  "shard_total_est": 2427040,
+  "shard_cap_total": 76800000,
+  "shard_max": 9626,
   "api_paths": 28,
   "api_faucet": 0
  }
