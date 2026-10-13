@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0c0f">
+<meta name="robots" content="noindex,nofollow">
+<meta name="description" content="Binanceの価格が設定した値に届いたら、iPhoneをサイレントでも鳴らし続ける見張りページ。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='34' r='22' fill='%23ffb02e'/%3E%3Crect x='30' y='20' width='4' height='16' rx='2' fill='%231b1204'/%3E%3Crect x='30' y='32' width='13' height='4' rx='2' fill='%231b1204'/%3E%3C/svg%3E">
+<title>BTC価格アラーム</title>
+<style>
+/* Layout: 1列。上に枕元の時計のような価格、下に設定と操作。夜に見る前提で、暗い画面だけで作る */
+:root{
+  color-scheme: dark;
+  --bg:#0a0c0f;
+  --panel:#12161b;
+  --panel-2:#181e25;
+  --line:#28303a;
+  --fg:#e8ecf0;
+  --mut:#8d97a3;
+  --dim:#5f6873;
+  --amber:#ffb02e;
+  --amber-ink:#1b1204;
+  --amber-night:#5c3f0f;
+  --ok:#3fb950;
+  --warn:#e3a008;
+  --bad:#ff5a4f;
+  --alarm:#c8141c;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif;
+  --font-num:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:calc(14px + env(safe-area-inset-top,0px)) calc(40px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.02em;text-wrap:balance}
+h2{margin:0;font-size:15px;font-weight:700}
+p{margin:0}
+.small{font-size:13px;line-height:1.55}
+.mut{color:var(--mut)}
+.ok{color:var(--ok)}
+.warn{color:var(--warn)}
+.bad{color:var(--bad)}
+
+.chip{display:inline-flex;align-items:center;gap:7px;padding:3px 11px;border:1px solid var(--line);border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap;color:var(--mut)}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.chip[data-tone="ok"]{color:var(--ok)}
+.chip[data-tone="warn"]{color:var(--warn)}
+.chip[data-tone="bad"]{color:var(--bad)}
+
+.clock{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.clock-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.clock-sym{font-size:13px;color:var(--mut);letter-spacing:.08em}
+.price{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:clamp(38px,12.5vw,60px);line-height:1.08;font-weight:600;color:var(--amber);letter-spacing:-.02em;text-shadow:0 0 22px rgba(255,176,46,.28);overflow-wrap:anywhere}
+.clock-foot{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+
+.banner{border-radius:12px;padding:10px 14px;font-size:14px;line-height:1.6;border:1px solid;cursor:pointer}
+.banner::after{content:"（タップで閉じる）";font-size:12px;opacity:.7}
+.banner.warn{color:var(--warn);border-color:rgba(227,160,8,.45);background:rgba(227,160,8,.08)}
+.banner.bad{color:var(--bad);border-color:rgba(255,90,79,.5);background:rgba(255,90,79,.08)}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.field{display:flex;flex-direction:column;gap:5px}
+.field-label{font-size:14px;font-weight:600}
+.num{font:inherit;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:22px;color:var(--fg);background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;width:100%;min-width:0;-webkit-appearance:none;appearance:none}
+.num.txt{font-size:18px;text-transform:uppercase}
+.num:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:transparent}
+.num:disabled{opacity:.6;-webkit-text-fill-color:var(--fg)}
+.hint{font-size:13px;color:var(--mut);min-height:1.55em;font-variant-numeric:tabular-nums}
+.hint.bad{color:var(--bad)}
+.check{display:flex;gap:10px;align-items:center;font-size:14px}
+.check input{width:22px;height:22px;margin:0;accent-color:var(--amber);flex:none}
+.error{color:var(--bad);font-size:14px}
+
+summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--mut);list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ "}
+details[open]>summary::before{content:"▾ "}
+details[open]>summary{margin-bottom:10px}
+details.more{display:flex;flex-direction:column}
+.more-body{display:flex;flex-direction:column;gap:12px}
+
+.actions{display:flex;flex-direction:column;gap:10px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{font:inherit;font-size:16px;font-weight:700;line-height:1.3;min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);color:var(--fg);padding:10px 12px;touch-action:manipulation;cursor:pointer}
+.btn:disabled{opacity:.4;cursor:default}
+.btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.btn-primary{background:var(--amber);color:var(--amber-ink);border-color:transparent;font-size:19px;min-height:60px}
+.btn-quiet{background:transparent;color:var(--mut)}
+.btn-quiet[data-armed="1"]{color:var(--bad);border-color:var(--bad)}
+
+.guide ol{margin:0;padding-left:1.35em;display:flex;flex-direction:column;gap:5px;font-size:14px}
+.guide p{margin-top:10px}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:13px;max-height:280px;overflow:auto}
+.log li{display:flex;gap:10px;color:var(--mut);min-width:0}
+.log time{font-family:var(--font-num);font-variant-numeric:tabular-nums;flex:none;color:var(--dim)}
+.log span{min-width:0;overflow-wrap:anywhere}
+.log li.ok span{color:var(--fg)}
+.log li.warn span{color:var(--warn)}
+.log li.bad span{color:var(--bad)}
+.log-empty{color:var(--dim);font-size:13px}
+.foot{font-size:12px;color:var(--mut);line-height:1.7}
+
+/* 画面を暗くする：黒いままにして、小さな文字だけ1分ごとに場所を変える */
+.dim{position:fixed;inset:0;z-index:20;background:#000;cursor:pointer}
+.dim-text{position:absolute;max-width:66vw;white-space:pre-line;font-family:var(--font-num);font-size:14px;line-height:1.7;color:var(--amber-night);transition:top 2s,left 2s}
+.dim-text.bad{color:#7a231e}
+.dim-hint{position:absolute;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));text-align:center;font-size:12px;color:#22262b}
+
+/* 鳴っている間：赤と黒の点滅、大きな「止める」 */
+.alarm{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--alarm);animation:flash 1s linear infinite}
+@keyframes flash{0%,49.9%{background:var(--alarm)}50%,100%{background:#000}}
+.alarm-inner{max-width:520px;width:100%;display:flex;flex-direction:column;gap:14px;text-align:center;color:#fff}
+.alarm-title{font-size:22px;font-weight:800;line-height:1.4;text-wrap:balance}
+.alarm-price{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:clamp(32px,10.5vw,56px);font-weight:700;line-height:1.1;overflow-wrap:anywhere}
+.alarm-sub{font-size:15px;line-height:1.6}
+.alarm-time{font-family:var(--font-num);font-size:14px;opacity:.85}
+.btn-stop{background:#fff;color:#000;border:none;font-size:26px;min-height:84px;border-radius:18px}
+.btn-sound{background:transparent;color:#fff;border:2px solid #fff}
+@media (prefers-reduced-motion: reduce){.alarm{animation:none}.dim-text{transition:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <h1 id="title">BTC価格アラーム</h1>
+    <span id="watchChip" class="chip" data-tone="idle">停止中</span>
+  </header>
+
+  <section class="clock" aria-label="今の価格">
+    <div class="clock-head">
+      <span class="clock-sym"><span id="symLabel">BTCUSDT</span>・Binance</span>
+      <span id="connChip" class="chip" data-tone="warn">接続中…</span>
+    </div>
+    <div id="price" class="price">—</div>
+    <div class="clock-foot">
+      <span id="updated">まだ受信していません</span>
+      <span id="varLine">Variationalの目安：—</span>
+    </div>
+  </section>
+
+  <p id="banner" class="banner warn" role="status" hidden></p>
+
+  <section class="card" aria-labelledby="setHead">
+    <h2 id="setHead">鳴らす価格（Binanceの価格）</h2>
+    <label class="field">
+      <span class="field-label">この価格以上で鳴らす</span>
+      <input id="above" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="例：85500">
+      <span id="aboveInfo" class="hint"></span>
+    </label>
+    <label class="field">
+      <span class="field-label">この価格以下で鳴らす</span>
+      <input id="below" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="使わないときは空欄">
+      <span id="belowInfo" class="hint"></span>
+    </label>
+    <p id="formError" class="error" role="alert" hidden></p>
+    <details class="more">
+      <summary>そのほかの設定</summary>
+      <div class="more-body">
+        <label class="field">
+          <span class="field-label">銘柄（Binanceの表記）</span>
+          <input id="symbol" class="num txt" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" value="BTCUSDT">
+        </label>
+        <label class="field">
+          <span class="field-label">Variationalとの差（Binance − Variational）</span>
+          <input id="offset" class="num" type="text" inputmode="decimal" autocomplete="off" value="110">
+          <span class="hint">目安を出すためだけに使います。鳴らすかどうかはBinanceの価格で決めます。差は日によって変わります。</span>
+        </label>
+        <label class="check">
+          <input id="lossAlarm" type="checkbox" checked>
+          <span>価格が5分届かないときも鳴らす</span>
+        </label>
+      </div>
+    </details>
+  </section>
+
+  <section class="actions" aria-label="操作">
+    <button id="startBtn" class="btn btn-primary" type="button">見張り開始</button>
+    <button id="stopWatchBtn" class="btn btn-quiet" type="button" hidden>見張りをやめる</button>
+    <div class="row">
+      <button id="testBtn" class="btn" type="button">テスト（3秒）</button>
+      <button id="dimBtn" class="btn" type="button" disabled>画面を暗くする</button>
+    </div>
+    <p id="wakeLine" class="small mut">画面を消さない設定：見張りを始めると使います</p>
+  </section>
+
+  <details id="guide" class="card guide" open>
+    <summary>寝る前の準備（iPhone）</summary>
+    <ol>
+      <li>設定 → 画面表示と明るさ → 自動ロック →「なし」</li>
+      <li>低電力モードをオフにして、充電器につなぐ</li>
+      <li>Bluetoothのイヤホンやスピーカーを外す（音がそちらに行くため）</li>
+      <li>サイレントにしたまま「テスト」を押し、鳴っている間に音量ボタンで大きくする</li>
+      <li>「見張り開始」を押す。Safariはこのページを開いたままにする</li>
+      <li>「画面を暗くする」を押して寝る（画面は消えません）</li>
+    </ol>
+    <p class="small mut">鳴るのは、このページが画面に出ている間だけです。画面のロック、ほかのアプリへの切り替え、電池切れでは鳴りません。見張り中は、ほかのアプリの音楽が止まります。</p>
+  </details>
+
+  <section class="card" aria-labelledby="logHead">
+    <h2 id="logHead">記録</h2>
+    <ol id="log" class="log"></ol>
+  </section>
+
+  <p class="foot">価格はBinanceの公開データ（ログイン不要）から取っています。このページは取引や口座には触れません。鳴らないこともあるので、大事なポジションは取引所の注文（TP/SL）でも守ってください。</p>
+</main>
+
+<div id="dim" class="dim" hidden>
+  <div id="dimText" class="dim-text"></div>
+  <div class="dim-hint">タップで戻る</div>
+</div>
+
+<div id="alarm" class="alarm" role="alertdialog" aria-labelledby="alarmTitle" hidden>
+  <div class="alarm-inner">
+    <p id="alarmTitle" class="alarm-title">設定した価格に届きました</p>
+    <p id="alarmPrice" class="alarm-price">—</p>
+    <p id="alarmSub" class="alarm-sub"></p>
+    <p id="alarmTime" class="alarm-time"></p>
+    <button id="alarmStop" class="btn btn-stop" type="button">止める</button>
+    <button id="alarmSound" class="btn btn-sound" type="button" hidden>音が出ないときは、ここを押す</button>
+  </div>
+</div>
+
+<audio id="snd" preload="auto" playsinline></audio>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------- 決めごと
+  const CFG = {
+    wsHosts: ['wss://data-stream.binance.vision', 'wss://stream.binance.com:9443'],
+    restHosts: ['https://data-api.binance.vision', 'https://api.binance.com'],
+    staleMs: 20000,          // リアルタイムの価格がこの時間届かなければ、つなぎ直す
+    connectTimeoutMs: 15000, // つなぐのにこれ以上かかったら、やり直す
+    restEveryMs: 5000,       // リアルタイムが止まっている間は、この間隔で価格を取りに行く
+    lossMs: 5 * 60 * 1000,   // 価格がこの時間届かなければ「届いていません」で鳴らす
+    gapMs: 15000,            // ページがこの時間以上止まっていたら記録する
+    missGapMs: 8000,         // リアルタイムがこの時間途切れたら、途切れた間を1分足で確かめる
+    missEveryMs: 30000,      // 途切れている間は、この間隔で1分足を確かめる
+    testMs: 3000,
+  };
+  const KEY = 'priceAlarm.';
+
+  const el = {};
+  ['title', 'watchChip', 'symLabel', 'connChip', 'price', 'updated', 'varLine', 'banner',
+    'above', 'below', 'aboveInfo', 'belowInfo', 'symbol', 'offset', 'lossAlarm', 'formError',
+    'startBtn', 'stopWatchBtn', 'testBtn', 'dimBtn', 'wakeLine', 'guide', 'log',
+    'dim', 'dimText', 'alarm', 'alarmTitle', 'alarmPrice', 'alarmSub', 'alarmTime',
+    'alarmStop', 'alarmSound', 'snd'].forEach((id) => { el[id] = document.getElementById(id); });
+
+  // ---------------------------------------------------------------- 保存（できない環境でも動く）
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) { /* 保存なしで続ける */ } },
+    del(k) { try { localStorage.removeItem(KEY + k); } catch (e) { /* 保存なしで続ける */ } },
+  };
+
+  // ---------------------------------------------------------------- 小さな道具
+  const pad = (n) => String(n).padStart(2, '0');
+  const hhmm = (ms) => { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  const hhmmss = (ms) => hhmm(ms) + ':' + pad(new Date(ms).getSeconds());
+  const mins = (ms) => { const m = Math.round(ms / 60000); return m < 1 ? '1分未満' : m + '分'; };
+  const toHalf = (s) => String(s).replace(/[０-９．－]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  function parseNum(v) {
+    const t = toHalf(v == null ? '' : v).trim().replace(/[,，、\s$＄]/g, '');
+    if (t === '') return null;
+    const n = Number(t);
+    return Number.isFinite(n) && n > 0 ? n : NaN;
+  }
+  function decimals(p) { return p >= 1 ? 2 : p >= 0.01 ? 4 : 6; }
+  function fmt(p, d) {
+    if (p == null || !Number.isFinite(p)) return '—';
+    const k = d == null ? decimals(Math.abs(p)) : d;
+    return p.toLocaleString('en-US', { minimumFractionDigits: k, maximumFractionDigits: k });
+  }
+  function fmtDiff(diff, ref) {
+    const k = ref >= 1000 ? 0 : decimals(ref);
+    return (diff > 0 ? '+' : diff < 0 ? '−' : '±') + fmt(Math.abs(diff), k);
+  }
+  function sanitizeSymbol(s) {
+    const t = toHalf(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return /^[A-Z0-9]{5,20}$/.test(t) ? t : '';
+  }
+  const baseAsset = (sym) => sym.replace(/(USDT|USDC|FDUSD|TUSD|BUSD|JPY|BTC|ETH|BNB)$/, '') || sym;
+  const describe = (a) => fmt(a.price) + (a.op === 'above' ? ' 以上' : ' 以下');
+
+  // ---------------------------------------------------------------- 音（ファイルを使わず、ここで作る）
+  function wavDataURI(seconds, rate, fn) {
+    const n = Math.round(seconds * rate);
+    const bytes = new Uint8Array(44 + n * 2);
+    const v = new DataView(bytes.buffer);
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE');
+    str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) {
+      const s = Math.max(-1, Math.min(1, fn(i / rate)));
+      v.setInt16(44 + i * 2, Math.round(s * 32767), true);
+    }
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return 'data:audio/wav;base64,' + btoa(bin);
+  }
+  const SAT = Math.tanh(2.4);
+  function beep(t, local, f) {
+    const slot = local % 0.15;              // 0.09秒鳴って、0.06秒休む
+    if (slot >= 0.09) return 0;
+    const env = Math.min(1, slot / 0.004, (0.09 - slot) / 0.004);
+    return 0.95 * env * Math.tanh(2.4 * Math.sin(2 * Math.PI * f * t)) / SAT;
+  }
+  function alarmWave(t) {                   // 2秒で1周：高い音4回、低い音4回
+    const c = t % 2;
+    if (c < 0.6) return beep(t, c, 2800);
+    if (c >= 0.85 && c < 1.45) return beep(t, c - 0.85, 2100);
+    return 0;
+  }
+  const SOUND = { alarm: wavDataURI(2, 44100, alarmWave), silent: wavDataURI(1, 8000, () => 0) };
+
+  // ---------------------------------------------------------------- 状態
+  const saved = store.get('settings', {}) || {};
+  const S = {
+    symbol: sanitizeSymbol(saved.symbol) || 'BTCUSDT',
+    price: null, priceAt: 0,
+    wsAt: 0, wsOpenAt: 0, restAt: 0, restOkAt: 0,
+    watching: false, armedAt: 0, alarms: [],
+    ringing: null, testing: false,
+    lossFired: false, lossClock: 0,
+    gapFrom: null, missAt: 0, missFailLogged: false,
+    lastBeat: Date.now(), hiddenAt: 0, sessionSavedAt: 0, openedAt: Date.now(),
+  };
+
+  // ---------------------------------------------------------------- 画面の部品
+  function setChip(node, tone, text) { node.dataset.tone = tone; node.textContent = text; }
+  function showError(msg) { el.formError.textContent = msg; el.formError.hidden = false; }
+  function hideError() { el.formError.hidden = true; }
+  function showBanner(msg, tone) { el.banner.textContent = msg; el.banner.className = 'banner ' + (tone || 'warn'); el.banner.hidden = false; }
+  function log(msg, tone) {
+    const li = document.createElement('li');
+    if (tone) li.className = tone;
+    const t = document.createElement('time');
+    t.textContent = hhmmss(Date.now());
+    const s = document.createElement('span');
+    s.textContent = msg;
+    li.append(t, s);
+    el.log.prepend(li);
+    while (el.log.childElementCount > 80) el.log.lastElementChild.remove();
+  }
+  function setTitle() {
+    const name = baseAsset(S.symbol) + '価格アラーム';
+    el.title.textContent = name;
+    document.title = S.ringing ? '鳴っています｜' + name : name;
+  }
+
+  // ---------------------------------------------------------------- 音を出す
+  const snd = el.snd;
+  let sndKind = '';
+  let testTimer = 0;
+  function play(kind) {
+    if (sndKind !== kind) { snd.src = SOUND[kind]; sndKind = kind; }
+    snd.loop = true;
+    if (kind === 'alarm') { try { snd.currentTime = 0; } catch (e) { /* 読み込み前 */ } }
+    try {
+      const p = snd.play();
+      return (p && typeof p.then === 'function') ? p : Promise.resolve();
+    } catch (e) { return Promise.reject(e); }
+  }
+  function quiet() { try { snd.pause(); } catch (e) { /* なし */ } }
+  function prepareAudio() {
+    // iOS 17以降：ページの音を「再生」の扱いにして、サイレントスイッチの影響を受けないようにする
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* 古いiOS */ }
+  }
+  function setupMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try { navigator.mediaSession.metadata = new MediaMetadata({ title: '価格アラーム（見張り中）', artist: S.symbol + '・Binance' }); } catch (e) { /* なし */ }
+    const onPause = () => { if (S.ringing) stopRinging(); else if (S.watching) play('silent').catch(() => {}); };
+    ['pause', 'stop'].forEach((a) => { try { navigator.mediaSession.setActionHandler(a, onPause); } catch (e) { /* 未対応 */ } });
+  }
+
+  // ---------------------------------------------------------------- 画面を消さない
+  let wakeLock = null;
+  const WAKE_TEXT = {
+    none: ['mut', '画面を消さない設定：見張りを始めると使います'],
+    on: ['ok', '画面を消さない設定：有効'],
+    released: ['warn', '画面を消さない設定が外れました。自動ロックが「なし」なら大丈夫です'],
+    unsupported: ['warn', 'このブラウザは「画面を消さない設定」に未対応です。自動ロックを「なし」にしてください'],
+    failed: ['warn', '「画面を消さない設定」ができませんでした。自動ロックを「なし」にしてください'],
+  };
+  function setWake(s) { const [tone, text] = WAKE_TEXT[s]; el.wakeLine.className = 'small ' + tone; el.wakeLine.textContent = text; }
+  async function requestWake() {
+    if (!('wakeLock' in navigator)) { setWake('unsupported'); return; }
+    if (wakeLock) return;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      if (!S.watching) { lock.release().catch(() => {}); return; }
+      wakeLock = lock;
+      setWake('on');
+      lock.addEventListener('release', () => { if (wakeLock === lock) { wakeLock = null; if (S.watching) setWake('released'); } });
+    } catch (e) { setWake('failed'); }
+  }
+  function releaseWake() { const l = wakeLock; wakeLock = null; if (l) l.release().catch(() => {}); setWake('none'); }
+
+  // ---------------------------------------------------------------- 価格を受け取る（リアルタイム）
+  let ws = null, wsHostIdx = 0, wsBackoff = 1000, wsTimer = 0;
+  function connectWS() {
+    clearTimeout(wsTimer); wsTimer = 0;
+    dropWS();
+    const host = CFG.wsHosts[wsHostIdx % CFG.wsHosts.length];
+    const sym = S.symbol;
+    let sock;
+    try { sock = new WebSocket(host + '/stream?streams=' + sym.toLowerCase() + '@aggTrade'); } catch (e) { scheduleWS(); return; }
+    ws = sock;
+    S.wsOpenAt = Date.now();
+    sock.onopen = () => { if (ws === sock) { wsBackoff = 1000; S.wsOpenAt = Date.now(); } };
+    sock.onmessage = (ev) => {
+      if (ws !== sock) return;
+      let m;
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
+      const d = m && m.data ? m.data : m;
+      if (!d || d.s !== sym || d.p == null) return;
+      const p = parseFloat(d.p);
+      if (!(p > 0)) return;
+      const now = Date.now();
+      const prevWs = S.wsAt;
+      if (!prevWs || now - prevWs > CFG.staleMs) log('リアルタイムの価格を受け取っています', 'ok');
+      S.wsAt = now;
+      if (S.watching && prevWs && now - prevWs > CFG.missGapMs && S.gapFrom === null) S.gapFrom = Math.max(prevWs, S.armedAt);
+      onPrice(p);
+      if (S.watching && S.gapFrom !== null && now - S.missAt > 5000) checkMissed(now);
+    };
+    sock.onerror = sock.onclose = () => { if (ws === sock) { ws = null; scheduleWS(); } };
+  }
+  function dropWS() {
+    const s = ws; ws = null;
+    if (s) { s.onopen = s.onmessage = s.onerror = s.onclose = null; try { s.close(); } catch (e) { /* なし */ } }
+  }
+  function scheduleWS() {
+    clearTimeout(wsTimer);
+    wsHostIdx++;
+    wsTimer = setTimeout(connectWS, wsBackoff);
+    wsBackoff = Math.min(wsBackoff * 2, 30000);
+  }
+
+  // ---------------------------------------------------------------- 価格を受け取る（予備：5秒ごと）
+  let restBusy = false, restHostIdx = 0;
+  async function getJSON(url) {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = setTimeout(() => { if (ctl) ctl.abort(); }, 8000);
+    try {
+      const r = await fetch(url, { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (e) { return null; } finally { clearTimeout(timer); }
+  }
+  async function getFromAnyHost(path) {
+    for (let i = 0; i < CFG.restHosts.length; i++) {
+      const idx = (restHostIdx + i) % CFG.restHosts.length;
+      const j = await getJSON(CFG.restHosts[idx] + path);
+      if (j) { restHostIdx = idx; return j; }
+    }
+    return null;
+  }
+  async function pollRest() {
+    if (restBusy) return;
+    restBusy = true;
+    S.restAt = Date.now();
+    const sym = S.symbol;
+    try {
+      const j = await getFromAnyHost('/api/v3/ticker/price?symbol=' + sym);
+      const p = j ? parseFloat(j.price) : NaN;
+      if (p > 0 && sym === S.symbol) { S.restOkAt = Date.now(); onPrice(p); }
+    } finally { restBusy = false; }
+  }
+
+  // ---------------------------------------------------------------- 価格が届いたとき
+  function onPrice(p) {
+    S.price = p;
+    S.priceAt = Date.now();
+    if (S.lossFired) { S.lossFired = false; log('価格がまた届くようになりました', 'ok'); }
+    checkAlarms(p);
+  }
+  function checkAlarms(p) {
+    if (!S.watching || S.ringing) return;
+    for (const a of S.alarms) {
+      if (a.fired) continue;
+      if (a.op === 'above' ? p >= a.price : p <= a.price) {
+        a.fired = true;
+        ring('price', [{ a, p }]);
+        return;
+      }
+    }
+  }
+  // リアルタイムが途切れた間（ページが止まっていた間も含む）の最高・最低を、ローソク足で確かめる。
+  // 16分以内は1秒足。それより長いときは、最初の1分だけ1秒足、残りは1分足（見張り開始前の値動きを混ぜないため）
+  async function rangeHiLo(sym, fromMs, toMs) {
+    const parts = [];
+    const firstMinEnd = Math.floor(fromMs / 60000) * 60000 + 60000;
+    if (toMs - fromMs <= 990000) parts.push(['1s', Math.floor(fromMs / 1000) * 1000, toMs]);
+    else { parts.push(['1s', Math.floor(fromMs / 1000) * 1000, firstMinEnd - 1]); parts.push(['1m', firstMinEnd, toMs]); }
+    let hi = -Infinity, lo = Infinity;
+    for (const [iv, s, e] of parts) {
+      const rows = await getFromAnyHost('/api/v3/klines?symbol=' + sym + '&interval=' + iv + '&startTime=' + s + '&endTime=' + e + '&limit=1000');
+      if (!Array.isArray(rows)) return null;
+      for (const r of rows) { hi = Math.max(hi, parseFloat(r[2])); lo = Math.min(lo, parseFloat(r[3])); }
+    }
+    return { hi, lo };
+  }
+  let missedBusy = false;
+  async function checkMissed(toMs) {
+    if (missedBusy || S.gapFrom === null) return;
+    missedBusy = true;
+    S.missAt = Date.now();
+    const fromMs = S.gapFrom;
+    const sym = S.symbol;
+    try {
+      const range = await rangeHiLo(sym, fromMs, toMs);
+      if (!range) {
+        if (!S.missFailLogged) { S.missFailLogged = true; log('途切れた間の値動きを、まだ確かめられていません', 'warn'); }
+        return;
+      }
+      S.missFailLogged = false;
+      if (!S.watching || sym !== S.symbol) return;
+      const { hi, lo } = range;
+      const hits = [];
+      for (const a of S.alarms) {
+        if (a.fired) continue;
+        if (a.op === 'above' && hi >= a.price) hits.push({ a, p: hi });
+        if (a.op === 'below' && lo <= a.price) hits.push({ a, p: lo });
+      }
+      if (S.gapFrom === fromMs) S.gapFrom = Date.now() - S.wsAt <= CFG.missGapMs ? null : toMs;
+      if (hits.length || toMs - fromMs >= 60000) {
+        const span = hhmm(fromMs) + '〜' + hhmm(toMs);
+        if (hi === -Infinity) log(span + 'は取引がありませんでした');
+        else log(span + 'の最高 ' + fmt(hi) + '／最低 ' + fmt(lo) + (hits.length ? '（鳴らす価格に届いていました）' : '（鳴らす価格には届いていません）'), hits.length ? 'bad' : '');
+      }
+      if (hits.length) { hits.forEach((h) => { h.a.fired = true; }); ring('missed', hits, { from: fromMs, to: toMs }); }
+    } finally { missedBusy = false; }
+  }
+
+  // ---------------------------------------------------------------- 鳴らす・止める
+  function ring(kind, hits, span) {
+    if (S.ringing && kind === 'loss') return;     // 価格で鳴っている最中は、そちらを優先
+    const now = Date.now();
+    let title, big, sub;
+    if (kind === 'loss') {
+      title = '価格が届いていません';
+      big = '受信なし：' + mins(now - Math.max(S.priceAt, S.armedAt));
+      sub = 'Wi-Fiや電波を確かめてください。届かない間の値動きは分かりません。ポジションを取引所で確かめてください。';
+    } else {
+      title = kind === 'missed' ? '見張りが止まっている間に、設定した価格に届いていました' : '設定した価格に届きました';
+      big = S.symbol + ' ' + fmt(hits[0].p);
+      sub = hits.map((h) => describe(h.a)).join('／') + 'で鳴らす設定';
+      if (kind === 'missed') sub += '（' + hhmm(span.from) + '〜' + hhmm(span.to) + 'の' + (hits[0].a.op === 'above' ? '最高値' : '最安値') + '）';
+    }
+    S.ringing = { kind, at: now };
+    el.alarmTitle.textContent = title;
+    el.alarmPrice.textContent = big;
+    el.alarmSub.textContent = sub;
+    el.alarmTime.textContent = hhmmss(now);
+    el.alarm.hidden = false;
+    el.dim.hidden = true;
+    setTitle();
+    log(title + '：' + big + '（' + sub + '）', 'bad');
+    clearTimeout(testTimer); S.testing = false; el.testBtn.textContent = 'テスト（3秒）';
+    play('alarm').then(() => { el.alarmSound.hidden = true; }).catch(() => { el.alarmSound.hidden = false; log('音を自動で出せませんでした', 'bad'); });
+  }
+  function stopRinging() {
+    const r = S.ringing;
+    if (!r) return;
+    S.ringing = null;
+    el.alarm.hidden = true;
+    el.alarmSound.hidden = true;
+    setTitle();
+    if (r.kind === 'loss') S.lossClock = Date.now();
+    log('止めました');
+    if (!S.watching) { quiet(); return; }
+    if (!S.alarms.some((a) => !a.fired)) { endWatch('設定した価格はすべて鳴らしました。続けるときは、価格を入れ直して「見張り開始」を押してください'); return; }
+    play('silent').catch(() => {});
+    if (S.price && Date.now() - S.priceAt < CFG.staleMs) checkAlarms(S.price);
+  }
+
+  // ---------------------------------------------------------------- 見張りの開始・終了
+  function startWatch() {
+    hideError();
+    const above = parseNum(el.above.value), below = parseNum(el.below.value);
+    if (Number.isNaN(above) || Number.isNaN(below)) { showError('価格は数字で入れてください（例：85500）'); return; }
+    if (above === null && below === null) { showError('「以上」か「以下」の価格を、少なくとも1つ入れてください'); return; }
+    if (above !== null && below !== null && below >= above) { showError('「以下」の価格は、「以上」の価格より低くしてください'); return; }
+    const p = S.price && Date.now() - S.priceAt < 60000 ? S.price : null;
+    if (p !== null && above !== null && above <= p) { showError('「以上」の価格（' + fmt(above) + '）が、今の価格（' + fmt(p) + '）以下です。すぐに鳴ってしまいます'); return; }
+    if (p !== null && below !== null && below >= p) { showError('「以下」の価格（' + fmt(below) + '）が、今の価格（' + fmt(p) + '）以上です。すぐに鳴ってしまいます'); return; }
+
+    // タップの中で音を出しておく（iPhoneは、タップの中で一度鳴らした音しか、あとから鳴らせない）
+    prepareAudio();
+    play('silent').catch(() => { showBanner('音の準備ができませんでした。もう一度「見張り開始」を押してください', 'bad'); });
+
+    S.alarms = [];
+    if (above !== null) S.alarms.push({ op: 'above', price: above, fired: false });
+    if (below !== null) S.alarms.push({ op: 'below', price: below, fired: false });
+    S.watching = true;
+    S.armedAt = Date.now();
+    S.lossFired = false;
+    S.lossClock = Date.now();
+    S.gapFrom = null;
+    S.missAt = 0;
+    S.missFailLogged = false;
+    saveSettings();
+    saveSession(true);
+    requestWake();
+    setupMediaSession();
+    setWatchingUI(true);
+    el.banner.hidden = true;
+    log('見張りを始めました：' + S.alarms.map(describe).join('、') + 'で鳴らします', 'ok');
+    if (p === null) showBanner('今の価格がまだ届いていません。届きしだい見張ります', 'warn');
+  }
+  function endWatch(msg) {
+    S.watching = false;
+    S.alarms = [];
+    S.gapFrom = null;
+    quiet();
+    releaseWake();
+    store.del('session');
+    el.dim.hidden = true;
+    setWatchingUI(false);
+    log(msg);
+  }
+  function setWatchingUI(on) {
+    [el.above, el.below, el.symbol].forEach((i) => { i.disabled = on; });
+    el.startBtn.hidden = on;
+    el.stopWatchBtn.hidden = !on;
+    el.stopWatchBtn.dataset.armed = '';
+    el.stopWatchBtn.textContent = '見張りをやめる';
+    el.dimBtn.disabled = !on;
+    setChip(el.watchChip, on ? 'ok' : 'idle', on ? '見張り中' : '停止中');
+  }
+  function saveSettings() {
+    store.set('settings', { symbol: S.symbol, above: el.above.value.trim(), below: el.below.value.trim(), offset: el.offset.value.trim(), loss: el.lossAlarm.checked });
+  }
+  function saveSession(fresh) {
+    const now = Date.now();
+    S.sessionSavedAt = now;
+    const prev = fresh ? null : store.get('session', null);
+    store.set('session', { at: prev ? prev.at : now, beat: now });
+  }
+
+  // ---------------------------------------------------------------- ページが止まっていたとき
+  function onResume(from, to) {
+    if (!S.watching) return;
+    S.lossClock = to;
+    const msg = '見張りが止まっていました：' + hhmm(from) + '〜' + hhmm(to) + '（' + mins(to - from) + '）';
+    log(msg, 'warn');
+    showBanner(msg + '。画面が消えていたか、Safariが裏に回っていた可能性があります。止まっていた間の値動きは、価格が届きしだい1分足で確かめます。', 'warn');
+    if (!ws || ws.readyState !== 1) { wsBackoff = 1000; connectWS(); }
+    pollRest();
+    requestWake();
+  }
+
+  // ---------------------------------------------------------------- 毎秒の見回り
+  function tick() {
+    const now = Date.now();
+    const gap = now - S.lastBeat;
+    S.lastBeat = now;
+    if (gap > CFG.gapMs) onResume(now - gap, now);
+
+    if (ws) {
+      if (ws.readyState === 1 && now - Math.max(S.wsAt, S.wsOpenAt) > CFG.staleMs) {
+        if (S.wsAt && now - S.wsAt < CFG.staleMs * 2) log('リアルタイムの価格が止まりました。つなぎ直します', 'warn');
+        dropWS(); wsHostIdx++; connectWS();
+      } else if (ws.readyState === 0 && now - S.wsOpenAt > CFG.connectTimeoutMs) {
+        dropWS(); scheduleWS();
+      }
+    } else if (!wsTimer) {
+      connectWS();
+    }
+    if (now - S.wsAt > CFG.staleMs / 2 && now - S.restAt >= CFG.restEveryMs) pollRest();
+
+    if (S.watching && now - S.wsAt > CFG.missGapMs) {
+      if (S.gapFrom === null) S.gapFrom = Math.max(S.wsAt, S.armedAt);
+      if (now - S.missAt > CFG.missEveryMs) checkMissed(now);
+    }
+
+    if (S.watching && el.lossAlarm.checked && !S.lossFired && !S.ringing && now - Math.max(S.priceAt, S.lossClock) > CFG.lossMs) {
+      S.lossFired = true;
+      ring('loss');
+    }
+    if (S.watching && !S.ringing && !S.testing && snd.paused) play('silent').catch(() => {});
+    if (S.ringing && snd.paused && el.alarmSound.hidden) play('alarm').catch(() => { el.alarmSound.hidden = false; });
+    if (S.watching && now - S.sessionSavedAt > 60000) saveSession(false);
+  }
+
+  // ---------------------------------------------------------------- 表示
+  function connState(now) {
+    if (S.wsAt && now - S.wsAt < CFG.staleMs) return ['ok', 'リアルタイム'];
+    if (S.restOkAt && now - S.restOkAt < CFG.restEveryMs * 3) return ['warn', '予備の方法（5秒ごと）'];
+    if (!S.priceAt && now - S.openedAt < 15000) return ['warn', '接続中…'];
+    return ['bad', '価格が届いていません'];
+  }
+  function offsetValue() { const v = parseNum(el.offset.value); return v === null || Number.isNaN(v) ? null : v; }
+  function renderInfo(node, input, op) {
+    const v = parseNum(input.value);
+    const armed = S.watching ? S.alarms.find((x) => x.op === op) : null;
+    if (v === null) { node.textContent = op === 'below' ? '空欄なら使いません' : ''; node.className = 'hint'; return; }
+    if (Number.isNaN(v)) { node.textContent = '数字で入れてください'; node.className = 'hint bad'; return; }
+    const off = offsetValue();
+    const parts = [];
+    let bad = false;
+    if (armed && armed.fired) parts.push('鳴らしました');
+    else if (S.price) {
+      const diff = v - S.price;
+      const crossed = op === 'above' ? diff <= 0 : diff >= 0;
+      if (crossed) { parts.push(op === 'above' ? '今の価格がすでに上にあります' : '今の価格がすでに下にあります'); bad = true; }
+      else parts.push('今の価格まで ' + fmtDiff(diff, S.price) + '（' + (diff > 0 ? '+' : '−') + Math.abs(diff / S.price * 100).toFixed(2) + '%）');
+    }
+    if (off !== null) parts.push('Variationalで約 ' + fmt(v - off, v >= 1000 ? 0 : undefined));
+    node.textContent = parts.join('・');
+    node.className = 'hint' + (bad ? ' bad' : '');
+  }
+  function render() {
+    const now = Date.now();
+    el.symLabel.textContent = S.symbol;
+    el.price.textContent = fmt(S.price);
+    if (S.priceAt) {
+      const s = Math.max(0, Math.round((now - S.priceAt) / 1000));
+      el.updated.textContent = hhmmss(S.priceAt) + ' 受信' + (s >= 3 ? '（' + s + '秒前）' : '');
+    }
+    const [tone, text] = connState(now);
+    if (el.connChip.dataset.tone !== tone || el.connChip.textContent !== text) setChip(el.connChip, tone, text);
+    const off = offsetValue();
+    el.varLine.textContent = 'Variationalの目安：' + (S.price && off !== null ? '約 ' + fmt(S.price - off, S.price >= 1000 ? 0 : undefined) : '—');
+    renderInfo(el.aboveInfo, el.above, 'above');
+    renderInfo(el.belowInfo, el.below, 'below');
+    if (!el.dim.hidden) {
+      const lines = [hhmm(now), S.symbol + ' ' + fmt(S.price)];
+      S.alarms.filter((a) => !a.fired).forEach((a) => lines.push(describe(a) + 'で鳴らす'));
+      lines.push(text);
+      el.dimText.textContent = lines.join('\n');
+      el.dimText.classList.toggle('bad', tone === 'bad');
+    }
+  }
+  function moveDim() {
+    el.dimText.style.left = (4 + Math.random() * 26) + '%';
+    el.dimText.style.top = (8 + Math.random() * 72) + '%';
+  }
+
+  // ---------------------------------------------------------------- 操作
+  el.startBtn.addEventListener('click', startWatch);
+  let stopArmTimer = 0;
+  el.stopWatchBtn.addEventListener('click', () => {
+    if (el.stopWatchBtn.dataset.armed === '1') { clearTimeout(stopArmTimer); endWatch('見張りをやめました'); return; }
+    el.stopWatchBtn.dataset.armed = '1';
+    el.stopWatchBtn.textContent = 'もう一度押すと、やめます';
+    stopArmTimer = setTimeout(() => { el.stopWatchBtn.dataset.armed = ''; el.stopWatchBtn.textContent = '見張りをやめる'; }, 4000);
+  });
+  el.testBtn.addEventListener('click', () => {
+    if (S.ringing) return;
+    prepareAudio();
+    S.testing = true;
+    el.testBtn.textContent = '鳴らしています…';
+    play('alarm').catch(() => { showBanner('音を出せませんでした。もう一度「テスト」を押してください', 'bad'); });
+    clearTimeout(testTimer);
+    testTimer = setTimeout(() => {
+      S.testing = false;
+      el.testBtn.textContent = 'テスト（3秒）';
+      if (S.ringing) return;
+      if (S.watching) play('silent').catch(() => {}); else quiet();
+    }, CFG.testMs);
+  });
+  el.dimBtn.addEventListener('click', () => { el.dim.hidden = false; moveDim(); render(); });
+  el.dim.addEventListener('click', () => { el.dim.hidden = true; });
+  el.alarmStop.addEventListener('click', stopRinging);
+  el.alarmSound.addEventListener('click', () => { prepareAudio(); play('alarm').then(() => { el.alarmSound.hidden = true; }).catch(() => {}); });
+  el.banner.addEventListener('click', () => { el.banner.hidden = true; });
+  [el.above, el.below, el.offset].forEach((i) => { i.addEventListener('input', () => { hideError(); saveSettings(); render(); }); });
+  el.lossAlarm.addEventListener('change', saveSettings);
+  el.guide.addEventListener('toggle', () => { store.set('guideOpen', el.guide.open); });
+  el.symbol.addEventListener('change', async () => {
+    const s = sanitizeSymbol(el.symbol.value);
+    if (!s) { showError('銘柄はBinanceの表記で入れてください（例：BTCUSDT、ETHUSDT）'); el.symbol.value = S.symbol; return; }
+    el.symbol.value = s;
+    if (s === S.symbol) return;
+    const j = await getFromAnyHost('/api/v3/ticker/price?symbol=' + s);
+    const p = j ? parseFloat(j.price) : NaN;
+    if (!(p > 0)) { showError(s + ' の価格を取れませんでした。表記を確かめてください'); el.symbol.value = S.symbol; return; }
+    hideError();
+    S.symbol = s;
+    S.price = null; S.priceAt = 0; S.wsAt = 0;
+    S.restOkAt = Date.now();
+    saveSettings();
+    setTitle();
+    wsBackoff = 1000;
+    connectWS();
+    onPrice(p);
+    log('銘柄を ' + s + ' に変えました');
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!S.watching) return;
+    if (document.visibilityState === 'hidden') { S.hiddenAt = Date.now(); log('画面が隠れました。この間は見張りが止まることがあります', 'warn'); }
+    else { S.hiddenAt = 0; requestWake(); }
+  });
+  window.addEventListener('online', () => { log('ネットにつながりました'); wsBackoff = 1000; connectWS(); pollRest(); });
+  window.addEventListener('offline', () => { log('ネットが切れました', 'warn'); });
+
+  // ---------------------------------------------------------------- はじめに
+  el.symbol.value = S.symbol;
+  if (saved.above != null) el.above.value = saved.above;
+  if (saved.below != null) el.below.value = saved.below;
+  if (saved.offset != null && saved.offset !== '') el.offset.value = saved.offset;
+  if (saved.loss === false) el.lossAlarm.checked = false;
+  el.guide.open = store.get('guideOpen', true) !== false;
+  setTitle();
+  setWake('none');
+  const prev = store.get('session', null);
+  if (prev && prev.beat && Date.now() - prev.beat < 24 * 3600 * 1000) {
+    showBanner('前回の見張り（' + hhmm(prev.at) + '開始）は、' + hhmm(prev.beat) + 'ごろに止まっています。ページが読み込み直された可能性があります。続けるときは「見張り開始」を押してください。', 'bad');
+    log('前回の見張りが、途中で止まっていました（最後に動いていたのは ' + hhmm(prev.beat) + 'ごろ）', 'bad');
+  }
+  store.del('session');
+  log('ページを開きました');
+  connectWS();
+  pollRest();
+  setInterval(tick, 1000);
+  setInterval(render, 250);
+  setInterval(() => { if (!el.dim.hidden) moveDim(); }, 60000);
+  render();
+
+  window.priceAlarm = { cfg: CFG, state: S };   // 調べもの用
+})();
+</script>
+</body>
+</html>
