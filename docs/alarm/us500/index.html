@@ -163,7 +163,7 @@ details.more{display:flex;flex-direction:column}
           <input id="lossAlarm" type="checkbox" checked>
           <span>価格が5分届かないときも鳴らす</span>
         </label>
-        <p class="small mut">Variationalの目安は、Lighter側の価格とVariationalのUS500スワップ（US500-SWAP）の値段の差を10分ごとに測って出しています。鳴らすかどうかは、Lighter側の目安価格で決めます。</p>
+        <p class="small mut">Variationalの目安は、Lighter側の価格とVariationalのUS500スワップ（US500-SWAP）の値段の差を10分ごとに測って出しています（Variationalの値段が出た時刻の、Lighter側の価格と比べます）。鳴らすかどうかは、Lighter側の目安価格で決めます。</p>
       </div>
     </details>
   </section>
@@ -233,6 +233,7 @@ details.more{display:flex;flex-direction:column}
     varEveryMs: 10 * 60 * 1000,   // Variationalのデータは約400KBあるので、10分に1回だけ取る（Variationalが止まっている時間は取らない）
     varFreshMs: 5 * 60 * 1000,    // これより古いVariationalの値段では差を測らない
     varMaxAgeMs: 30 * 60 * 1000,  // 測ってからこれより古い差は、表示しない
+    varSoonMs: 70 * 1000,         // 最初の差を今の価格で測ったときは、70秒後に一度だけ測り直す
     retryMs: 60000,          // 取れなかったときは、1分後、2分後、4分後…（最長10分）にやり直す
     staleMs: 30000,          // リアルタイムの価格がこの時間届かなければ、つなぎ直す
     connectTimeoutMs: 15000, // つなぐのにこれ以上かかったら、やり直す
@@ -326,7 +327,7 @@ details.more{display:flex;flex-direction:column}
     lossFired: false, lossClock: 0,
     gapFrom: null, missAt: 0, missFailLogged: false,
     lastBeat: Date.now(), hiddenAt: 0, sessionSavedAt: 0, openedAt: Date.now(),
-    varMid: null, varAt: 0, varNextAt: 0, varFails: 0, varOffset: null, varOffsetAt: 0,
+    varMid: null, varAt: 0, varNextAt: 0, varFails: 0, varOffset: null, varOffsetAt: 0, varExact: false, varSoonUsed: false,
     market: null,
   };
 
@@ -489,17 +490,23 @@ details.more{display:flex;flex-direction:column}
       ok = true;
       const now = Date.now();
       S.varMid = (bid + ask) / 2;
-      S.varAt = Date.parse(x.quotes.updated_at || '') || now;
+      const t = Date.parse(String(x.quotes.updated_at || '').replace(/(\.\d{3})\d+/, '$1'));   // 小数点以下は3桁にそろえる
+      S.varAt = Number.isFinite(t) ? t : now;
+      // Variationalの値段は約1分ごとにしか新しくならないので、その時刻のLighter側の価格と比べる（記録がなければ今の価格）
+      const matched = priceAt(S.varAt);
+      const ref = matched !== null ? matched : (S.price && now - S.priceAt < CFG.staleMs ? S.price : null);
       // 差を測るのは、Variationalが取引できる時間で、両方の値段が新しいときだけ
-      const fresh = now - S.varAt < CFG.varFreshMs && S.price && now - S.priceAt < CFG.staleMs;
-      if (fresh && marketOpen(now) !== false) {
-        S.varOffset = S.price - S.varMid;
+      if (ref !== null && now - S.varAt < CFG.varFreshMs && marketOpen(now) !== false) {
+        S.varOffset = ref - S.varMid;
         S.varOffsetAt = now;
+        S.varExact = matched !== null;
       }
     } finally {
       varBusy = false;
       S.varFails = ok ? 0 : S.varFails + 1;
-      S.varNextAt = Date.now() + (ok ? CFG.varEveryMs : retryAfter(S.varFails, CFG.varEveryMs));
+      const soon = ok && S.varOffset !== null && !S.varExact && !S.varSoonUsed;
+      if (soon) S.varSoonUsed = true;
+      S.varNextAt = Date.now() + (!ok ? retryAfter(S.varFails, CFG.varEveryMs) : soon ? CFG.varSoonMs : CFG.varEveryMs);
     }
   }
 
@@ -535,9 +542,22 @@ details.more{display:flex;flex-direction:column}
   }
 
   // ---------------------------------------------------------------- 価格が届いたとき
+  const hist = [];   // Lighter側の価格の記録 [時刻, 価格]（直近5分）
+  function remember(p, t) {
+    hist.push([t, p]);
+    while (hist.length && t - hist[0][0] > 5 * 60000) hist.shift();
+  }
+  // 時刻tの時点のLighter側の価格（t以前で一番新しいもの。15秒以内の記録がなければ使わない）
+  function priceAt(t) {
+    for (let i = hist.length - 1; i >= 0; i--) {
+      if (hist[i][0] <= t) return t - hist[i][0] <= 15000 ? hist[i][1] : null;
+    }
+    return null;
+  }
   function onPrice(p) {
     S.price = p;
     S.priceAt = Date.now();
+    remember(p, S.priceAt);
     if (S.lossFired) { S.lossFired = false; log('価格がまた届くようになりました', 'ok'); }
     checkAlarms(p);
   }
@@ -885,15 +905,15 @@ details.more{display:flex;flex-direction:column}
   store.del('session');
   log('ページを開きました');
   connectWS();
-  // 差を測るために、先に価格を取ってから、Variationalを取る
-  S.varNextAt = Date.now() + 60000;   // 見回りと重ならないように
-  pollRest().then(() => pollVar());
+  // Variationalの値段は最大1分ほど前のものなので、Lighter側の価格を1分ほど記録してから、最初の差を測る
+  S.varNextAt = Date.now() + 65000;
+  pollRest();
   setInterval(tick, 1000);
   setInterval(render, 250);
   setInterval(() => { if (!el.dim.hidden) moveDim(); }, 60000);
   render();
 
-  window.us500Alarm = { cfg: CFG, state: S, swapOpenAt, swapNextChange };   // 調べもの用
+  window.us500Alarm = { cfg: CFG, state: S, swapOpenAt, swapNextChange, priceAt };   // 調べもの用
 })();
 </script>
 </body>
